@@ -1,7 +1,8 @@
 package com.tuhn.routes
 
 import com.tuhn.auth.Session
-import com.tuhn.repository.IRepository
+import com.tuhn.repository.ITodoRepository
+import com.tuhn.repository.data.Todo
 import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.application.log
@@ -16,28 +17,42 @@ import io.ktor.sessions.get
 import io.ktor.sessions.sessions
 
 const val TODOS = "todos"
+const val FIND_TODO = "$TODOS"
+const val CREATE_TODO = "$TODOS/create"
+const val UPDATE_TODO = "$TODOS/update"
+const val DELETE_TODO = "$TODOS/delete"
 
-@KtorExperimentalLocationsAPI
 @Location(TODOS)
 class TodoRoute
 
-@KtorExperimentalLocationsAPI
-fun Route.todos(db: IRepository) {
+@Location(FIND_TODO)
+class FindTodoRoute
+
+@Location(CREATE_TODO)
+class CreateTodoRoute
+
+@Location(UPDATE_TODO)
+class UpdateTodoRoute
+
+@Location(DELETE_TODO)
+class DeleteTodoRoute
+
+fun Route.TodoRoute(repository: ITodoRepository) {
+
     authenticate("jwt") {
-        post<TodoRoute> {
+        post<CreateTodoRoute> {
             val todosParameters = call.receive<Parameters>()
-            val todo =
-                todosParameters["todo"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing Todo")
+            val title =
+                todosParameters["title"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing Title")
+            val content =
+                todosParameters["content"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing Content")
             val done =
-                todosParameters["done"] ?: "false"
-            val user = call.sessions.get<Session>()?.let { db.findUser(it.userId) }
-            if (user == null) {
-                call.respond(HttpStatusCode.BadRequest, "Problems retrieving User")
-                return@post
-            }
+                !(todosParameters["done"] == null ||  todosParameters["done"]!!.lowercase().equals("false"))
+
+            val userId = call.sessions.get<Session>()?.userId ?: -1
 
             try {
-                val currentTodo = db.addTodo(user.userId, todo, done.toBoolean())
+                val currentTodo = repository.insert(userId = userId, todo = Todo(id = null,title = title, content = content, done = done))
                 currentTodo?.id?.let {
                     call.respond(HttpStatusCode.OK, currentTodo)
                 }
@@ -46,45 +61,54 @@ fun Route.todos(db: IRepository) {
                 call.respond(HttpStatusCode.BadRequest, "Problems Saving Todo")
             }
         }
-        get<TodoRoute> {
-            val user = call.sessions.get<Session>()?.let { db.findUser(it.userId) }
-            if (user == null) {
-                call.respond(HttpStatusCode.BadRequest, "Problems retrieving User")
-                return@get
-            }
+
+        get<FindTodoRoute> {
+            val userId = call.sessions.get<Session>()?.userId ?: -1
 
             val todosParameters = call.request.queryParameters
             val limit = if (todosParameters.contains("limit")) todosParameters["limit"] else null
             val offset = if (todosParameters.contains("offset")) todosParameters["offset"] else null
+            val title = if (todosParameters.contains("title")) todosParameters["title"] else null
+
             try {
                 if (limit != null && offset != null) {
-                    val todos = db.getTodos(user.userId, offset.toInt(), limit.toInt())
-                    call.respond(todos)
-
-                } else {
-                    val todos = db.getTodos(user.userId)
-                    call.respond(todos)
+//                    val todos = repository.getTodos(user.userId, offset.toInt(), limit.toInt())
+//                    call.respond(todos)
+                }
+                else if (title != null) {
+                    val todo = repository.findByTitle(userId = userId,title = title)
+                    todo?.let {
+                        call.respond(HttpStatusCode.OK,todo)
+                    }
+                }
+                else {
+                    val todos = repository.find(userId = userId)
+                    todos?.let {
+                        call.respond(HttpStatusCode.OK,todos)
+                    }
                 }
             } catch (e: Throwable) {
                 application.log.error("Failed to get Todos", e)
                 call.respond(HttpStatusCode.BadRequest, "Problems getting Todos")
             }
         }
-        delete<TodoRoute> {
+
+        delete<DeleteTodoRoute> {
             val todosParameters = call.receive<Parameters>()
             if (!todosParameters.contains("id")) {
                 return@delete call.respond(HttpStatusCode.BadRequest, "Missing Todo Id")
             }
             val todoId =
                 todosParameters["id"] ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing Todo Id")
-            val user = call.sessions.get<Session>()?.let { db.findUser(it.userId) }
-            if (user == null) {
+            val userId = call.sessions.get<Session>()?.userId ?: -1
+
+            if (userId == null) {
                 call.respond(HttpStatusCode.BadRequest, "Problems retrieving User")
                 return@delete
             }
 
             try {
-                db.deleteTodo(user.userId, todoId.toInt())
+                repository.deleteByID(userId, todoId.toLong())
                 call.respond(HttpStatusCode.OK)
             } catch (e: Throwable) {
                 application.log.error("Failed to delete todo", e)

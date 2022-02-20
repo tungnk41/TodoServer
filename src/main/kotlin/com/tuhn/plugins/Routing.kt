@@ -2,28 +2,25 @@ package com.tuhn.plugins
 
 import com.tuhn.auth.JwtService
 import com.tuhn.auth.hash
-import com.tuhn.repository.DatabaseFactory
-import com.tuhn.repository.RepositoryTodo
-import com.tuhn.routes.todos
-import com.tuhn.routes.users
+import com.tuhn.repository.RepositoryImpl.TodoRepository
+import com.tuhn.repository.RepositoryImpl.UserRepository
+import com.tuhn.repository.data.source.local.TodoLocalDataSource
+import com.tuhn.repository.data.source.local.UserLocalDataSource
+import com.tuhn.routes.TodoRoute
+import com.tuhn.routes.UserRoute
 import io.ktor.routing.*
-import io.ktor.http.*
 import io.ktor.locations.*
 import io.ktor.application.*
 import io.ktor.response.*
-import io.ktor.request.*
 
 fun Application.configureRouting() {
     install(Locations) {
     }
 
-    DatabaseFactory.init()
-    val db = RepositoryTodo()
-    val jwtService = JwtService()
     val hashFunction = { s: String -> hash(s) }
     routing {
-        users(db, jwtService, hashFunction)
-        todos(db)
+        UserRoute( UserRepository(UserLocalDataSource()), JwtService(), hashFunction)
+        TodoRoute(TodoRepository(TodoLocalDataSource()))
 
         get("/") {
             call.respondText("Hello World!")

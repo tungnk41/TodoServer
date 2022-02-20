@@ -2,7 +2,8 @@ package com.tuhn.routes
 
 import com.tuhn.auth.JwtService
 import com.tuhn.auth.Session
-import com.tuhn.repository.IRepository
+import com.tuhn.repository.IUserRepository
+import com.tuhn.repository.data.User
 import io.ktor.application.*
 import io.ktor.http.*
 import io.ktor.locations.*
@@ -10,44 +11,38 @@ import io.ktor.locations.post
 import io.ktor.request.*
 import io.ktor.response.*
 import io.ktor.routing.*
-import io.ktor.routing.application
 import io.ktor.sessions.*
 
-const val USERS = "user"
-const val USER_LOGIN = "$USERS/login"
-const val USER_LOGOUT = "$USERS/logout"
-const val USER_CREATE = "$USERS/create"
-const val USER_DELETE = "$USERS/delete"
+const val LOGIN = "/login"
+const val LOGOUT = "/logout"
+const val REGISTER = "/register"
+const val DELETE = "/delete"
 
-@KtorExperimentalLocationsAPI
-@Location(USER_LOGIN)
-class UserLoginRoute
+@Location(LOGIN)
+class LoginRoute
 
-@KtorExperimentalLocationsAPI
-@Location(USER_LOGOUT)
-class UserLogoutRoute
+@Location(LOGOUT)
+class LogoutRoute
 
-@KtorExperimentalLocationsAPI
-@Location(USER_CREATE)
-class UserCreateRoute
+@Location(REGISTER)
+class RegisterRoute
 
-@KtorExperimentalLocationsAPI
-@Location(USER_DELETE)
-class UserDeleteRoute
+@Location(DELETE)
+class DeleteRoute
 
-@KtorExperimentalLocationsAPI
-fun Route.users(db: IRepository, jwtService: JwtService, hashFunction: (String) -> String) {
-    post<UserLoginRoute> {
+fun Route.UserRoute(repository: IUserRepository, jwtService: JwtService, hashFunction: (String) -> String) {
+
+    post<LoginRoute> {
         val signinParameters = call.receive<Parameters>()
         val password = signinParameters["password"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
-        val email = signinParameters["email"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
+        val username = signinParameters["username"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
 
-        val hash = hashFunction(password)
+        val passwordEncrypt = hashFunction(password)
 
         try {
-            val currentUser = db.findUserByEmail(email)
-            currentUser?.userId?.let {
-                if (currentUser.password == hash) {
+            val currentUser = repository.findByName(username)
+            currentUser?.id?.let {
+                if (currentUser.password == passwordEncrypt) {
                     call.sessions.set(Session(it))
                     call.respondText(jwtService.generateToken(currentUser))
                 } else {
@@ -59,13 +54,14 @@ fun Route.users(db: IRepository, jwtService: JwtService, hashFunction: (String) 
             call.respond(HttpStatusCode.BadRequest, "Problems retrieving User")
         }
     }
-    post<UserLogoutRoute> {
+
+    post<LogoutRoute> {
         val signinParameters = call.receive<Parameters>()
-        val email = signinParameters["email"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
+        val username = signinParameters["username"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
 
         try {
-            val currentUser = db.findUserByEmail(email)
-            currentUser?.userId?.let {
+            val currentUser = repository.findByName(username)
+            currentUser?.id?.let {
                 call.sessions.clear(call.sessions.findName(Session::class))
                 call.respond(HttpStatusCode.OK)
             }
@@ -74,35 +70,20 @@ fun Route.users(db: IRepository, jwtService: JwtService, hashFunction: (String) 
             call.respond(HttpStatusCode.BadRequest, "Problems retrieving User")
         }
     }
-    delete<UserDeleteRoute> {
-        val signinParameters = call.receive<Parameters>()
-        val email = signinParameters["email"] ?: return@delete call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
 
-        try {
-            val currentUser = db.findUserByEmail(email)
-            currentUser?.userId?.let {
-                db.deleteUser(it)
-                call.sessions.clear(call.sessions.findName(Session::class))
-                call.respond(HttpStatusCode.OK)
-            }
-        } catch (e: Throwable) {
-            application.log.error("Failed to register user", e)
-            call.respond(HttpStatusCode.BadRequest, "Problems retrieving User")
-        }
-    }
-    post<UserCreateRoute> {
+    post<RegisterRoute> {
         val signupParameters = call.receive<Parameters>()
         val password = signupParameters["password"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
-        val displayName = signupParameters["displayName"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
-        val email = signupParameters["email"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
+        val username = signupParameters["username"] ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing Fields")
 
-        val hash = hashFunction(password)
+        val passwordEncrypt = hashFunction(password)
 
         try {
-            val newUser = db.addUser(email, displayName, hash)
-            newUser?.userId?.let {
+            val user = repository.insert(User(id = null, username = username, password = passwordEncrypt))
+
+            user?.id?.let {
                 call.sessions.set(Session(it))
-                call.respondText(jwtService.generateToken(newUser), status = HttpStatusCode.Created)
+                call.respondText(jwtService.generateToken(user), status = HttpStatusCode.Created)
             }
         } catch (e: Throwable) {
             application.log.error("Failed to register user", e)

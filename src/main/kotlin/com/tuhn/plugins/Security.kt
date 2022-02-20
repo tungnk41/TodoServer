@@ -2,19 +2,12 @@ package com.tuhn.plugins
 
 import io.ktor.sessions.*
 import io.ktor.auth.*
-import io.ktor.util.*
 import io.ktor.auth.jwt.*
-import com.auth0.jwt.JWT
-import com.auth0.jwt.JWTVerifier
-import com.auth0.jwt.algorithms.Algorithm
 import com.tuhn.auth.JwtService
 import com.tuhn.auth.Session
-import com.tuhn.auth.hash
-import com.tuhn.repository.RepositoryTodo
+import com.tuhn.repository.RepositoryImpl.UserRepository
+import com.tuhn.repository.data.source.local.UserLocalDataSource
 import io.ktor.application.*
-import io.ktor.response.*
-import io.ktor.request.*
-import io.ktor.routing.*
 
 fun Application.configureSecurity() {
 
@@ -40,7 +33,7 @@ fun Application.configureSecurity() {
 //            }
 //        }
 
-        val db = RepositoryTodo()
+        val repository = UserRepository(UserLocalDataSource())
         val jwtService = JwtService()
         jwt("jwt") {
             verifier(jwtService.verifier)
@@ -48,8 +41,8 @@ fun Application.configureSecurity() {
             validate {
                 val payload = it.payload
                 val claim = payload.getClaim("id")
-                val claimString = claim.asInt()
-                val user = db.findUser(claimString)
+                val claimString = claim.asLong()
+                val user = repository.findById(claimString)
                 user
             }
         }
