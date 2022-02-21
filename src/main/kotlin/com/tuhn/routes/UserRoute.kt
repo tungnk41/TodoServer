@@ -83,7 +83,7 @@ fun Route.UserRoute(repository: IUserRepository, jwtService: JwtService, hashFun
 
             user?.id?.let {
                 call.sessions.set(Session(it))
-                call.respondText(jwtService.generateToken(user), status = HttpStatusCode.Created)
+                call.respond(HttpStatusCode.Created,"Register success")
             }
         } catch (e: Throwable) {
             application.log.error("Failed to register user", e)

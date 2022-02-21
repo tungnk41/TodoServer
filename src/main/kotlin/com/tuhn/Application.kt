@@ -6,7 +6,7 @@ import io.ktor.server.netty.*
 import com.tuhn.plugins.*
 
 fun main() {
-    embeddedServer(Netty, port = System.getenv("PORT").toInt()) {
+    embeddedServer(Netty, port = System.getenv("PORT")?.toInt() ?: 8080) {
         DatabaseFactory.init()
         configureSecurity()
         configureMonitoring()
